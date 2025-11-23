@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { signup, login, getAlgorithms } from "../controllers/authController";
+import { signup, login, refreshToken, logout, logoutAll, getAlgorithms } from "../controllers/authController";
+import { authenticateToken } from "../middleware/auth";
 
 const router = Router();
 
@@ -20,5 +21,24 @@ router.post("/signup", signup);
  * Body: { username, password, algorithm?, expiresIn? }
  */
 router.post("/login", login);
+
+/**
+ * POST /refresh
+ * Body: { refreshToken }
+ */
+router.post("/refresh", refreshToken);
+
+/**
+ * POST /logout
+ * Body: { refreshToken }
+ */
+router.post("/logout", logout);
+
+/**
+ * POST /logout-all (protected)
+ * Logout from all devices
+ * Headers: { Authorization: "Bearer <token>" }
+ */
+router.post("/logout-all", authenticateToken, logoutAll);
 
 export default router;

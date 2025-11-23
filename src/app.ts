@@ -2,6 +2,10 @@ import "dotenv/config";
 import express from "express";
 import routes from "./routes";
 import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
+import { initializeRefreshTokensTable } from "./db/refreshTokensInit";
+
+// Initialize database tables
+initializeRefreshTokensTable();
 
 const app = express();
 const PORT = process.env.PORT || 3000;

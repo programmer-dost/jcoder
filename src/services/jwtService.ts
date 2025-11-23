@@ -35,10 +35,9 @@ export function getExpirationOptions(): { value: string; description: string }[]
 }
 
 /**
- * Calculate expiration timestamp
+ * Parse expiration string to seconds
  */
-export function calculateExpirationTimestamp(expiresIn: string): Date {
-  const now = new Date();
+export function parseExpiresIn(expiresIn: string): number {
   const match = expiresIn.match(/^(\d+)([smhdy]?)$/);
   
   if (!match) {
@@ -50,18 +49,27 @@ export function calculateExpirationTimestamp(expiresIn: string): Date {
   
   switch (unit) {
     case 's': // seconds
-      return new Date(now.getTime() + amount * 1000);
+      return amount;
     case 'm': // minutes
-      return new Date(now.getTime() + amount * 60 * 1000);
+      return amount * 60;
     case 'h': // hours
-      return new Date(now.getTime() + amount * 60 * 60 * 1000);
+      return amount * 60 * 60;
     case 'd': // days
-      return new Date(now.getTime() + amount * 24 * 60 * 60 * 1000);
+      return amount * 24 * 60 * 60;
     case 'y': // years
-      return new Date(now.getTime() + amount * 365 * 24 * 60 * 60 * 1000);
+      return amount * 365 * 24 * 60 * 60;
     default:
       throw new Error(`Unsupported time unit: ${unit}`);
   }
+}
+
+/**
+ * Calculate expiration timestamp
+ */
+export function calculateExpirationTimestamp(expiresIn: string): Date {
+  const now = new Date();
+  const seconds = parseExpiresIn(expiresIn);
+  return new Date(now.getTime() + seconds * 1000);
 }
 
 export interface JwtVerifyOptions {
@@ -89,6 +97,56 @@ export class JwtService {
       return { privateKey, publicKey };
     } catch (error) {
       throw new Error("RSA keys not found. Please ensure private.pem and public.pem exist in the 'keys' directory");
+    }
+  }
+
+  /**
+   * Sign a JWT token with the specified algorithm and custom secret
+   */
+  static signWithCustomSecret(payload: JwtPayload, options: JwtSignOptions, secret: string): string {
+    const { algorithm, expiresIn = "24h", issuer = "jcoder-api" } = options;
+
+    if (algorithm.startsWith('HS')) {
+      // HMAC algorithms with custom secret
+      return hmacSign(payload, secret, {
+        algorithm: algorithm as 'HS256' | 'HS384' | 'HS512',
+        expiresIn,
+        issuer,
+      });
+    } else {
+      throw new Error(`Custom secret only supported for HMAC algorithms, got: ${algorithm}`);
+    }
+  }
+
+  /**
+   * Verify a JWT token with custom secret
+   */
+  static verifyWithCustomSecret(token: string, secret: string, options: JwtVerifyOptions = {}): JwtPayload {
+    const { algorithms = ['HS256'], issuer = "jcoder-refresh" } = options;
+
+    // Try to decode the token to get the algorithm from header
+    const parts = token.split('.');
+    if (parts.length !== 3) {
+      throw new Error("Invalid token format");
+    }
+
+    const headerBase64 = parts[0];
+    const headerBuffer = Buffer.from(headerBase64.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+    const header = JSON.parse(headerBuffer.toString('utf8'));
+    const tokenAlgorithm = header.alg;
+
+    if (!algorithms.includes(tokenAlgorithm)) {
+      throw new Error(`Algorithm ${tokenAlgorithm} not allowed`);
+    }
+
+    if (tokenAlgorithm.startsWith('HS')) {
+      // HMAC algorithms with custom secret
+      return hmacVerify(token, secret, {
+        algorithms: [tokenAlgorithm],
+        issuer,
+      });
+    } else {
+      throw new Error(`Custom secret only supported for HMAC algorithms, got: ${tokenAlgorithm}`);
     }
   }
 

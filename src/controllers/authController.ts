@@ -1,8 +1,17 @@
 import { Request, Response } from "express";
 import db from "../db";
 import { hashPassword, verifyPassword } from "../security/password";
-import { SignupRequestBody, LoginRequestBody, UserResponse, LoginResponse, ApiResponse, User } from "../types";
-import { JwtService, validateExpiresIn, calculateExpirationTimestamp, getExpirationOptions } from "../services/jwtService";
+import { SignupRequestBody, LoginRequestBody, RefreshTokenRequestBody, UserResponse, LoginResponse, RefreshTokenResponse, ApiResponse, User } from "../types";
+import { JwtService, validateExpiresIn, calculateExpirationTimestamp, getExpirationOptions, parseExpiresIn } from "../services/jwtService";
+import { 
+  generateRefreshToken, 
+  storeRefreshToken, 
+  validateRefreshToken, 
+  revokeRefreshToken, 
+  revokeAllUserTokens,
+  rotateRefreshToken,
+  calculateRefreshTokenExpiration 
+} from "../services/refreshTokenService";
 
 /**
  * Handle user signup
@@ -61,7 +70,7 @@ export const signup = async (req: Request<{}, ApiResponse<UserResponse>, SignupR
  * Handle user login
  */
 export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRequestBody>, res: Response): Promise<Response> => {
-  const { username, password, algorithm = 'HS256', expiresIn = '24h' } = req.body;
+  const { username, password, algorithm = 'HS256', expiresIn = '24h', issueRefreshToken = false } = req.body;
 
   // Basic validation
   if (!username || !password) {
@@ -104,11 +113,12 @@ export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRe
     const issuedAt = new Date();
     const expiresAt = calculateExpirationTimestamp(expiresIn);
 
-    // Generate JWT token with selected algorithm and expiration
-    const token = JwtService.sign(
+    // Generate JWT access token with selected algorithm and expiration
+    const accessToken = JwtService.sign(
       { 
         userId: user.id,
-        username: user.username 
+        username: user.username,
+        type: 'access'
       },
       {
         algorithm,
@@ -117,14 +127,98 @@ export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRe
       }
     );
 
+    // Generate refresh token only if user opted for it
+    let refreshToken: string | undefined;
+    if (issueRefreshToken) {
+      refreshToken = generateRefreshToken(user.id, user.username, expiresIn);
+      // Calculate expiration for database storage
+      const refreshExpiration = calculateRefreshTokenExpiration(expiresIn);
+      const refreshExpirationSeconds = parseExpiresIn(refreshExpiration);
+      const refreshExpirationDays = Math.ceil(refreshExpirationSeconds / 86400);
+      storeRefreshToken(user.id, refreshToken, refreshExpirationDays);
+    }
+
+    const responseData: LoginResponse = {
+      user: {
+        id: user.id,
+        username: user.username,
+      },
+      accessToken,
+      algorithm,
+      expiresIn,
+      issuedAt: issuedAt.toISOString(),
+      expiresAt: expiresAt.toISOString(),
+    };
+
+    // Only include refreshToken if it was requested and generated
+    if (refreshToken) {
+      responseData.refreshToken = refreshToken;
+    }
+
     return res.status(200).json({
       message: "Login successful",
+      data: responseData,
+    });
+  } catch (err: any) {
+    console.error("Error in login:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+/**
+ * Refresh access token using refresh token
+ */
+export const refreshToken = async (req: Request<{}, ApiResponse<RefreshTokenResponse>, RefreshTokenRequestBody>, res: Response): Promise<Response> => {
+  const { refreshToken: clientRefreshToken } = req.body;
+
+  if (!clientRefreshToken) {
+    return res.status(400).json({
+      error: "Refresh token is required",
+    });
+  }
+
+  try {
+    // Validate refresh token and get user info
+    const userInfo = validateRefreshToken(clientRefreshToken);
+    
+    if (!userInfo) {
+      return res.status(401).json({ error: "Invalid or expired refresh token" });
+    }
+
+    // Default settings for new access token
+    const algorithm = 'HS256';
+    const expiresIn = '1h'; // Shorter expiry for access tokens
+    
+    // Calculate expiration timestamp
+    const issuedAt = new Date();
+    const expiresAt = calculateExpirationTimestamp(expiresIn);
+
+    // Generate new access token
+    const accessToken = JwtService.sign(
+      { 
+        userId: userInfo.userId,
+        username: userInfo.username,
+        type: 'access'
+      },
+      {
+        algorithm,
+        expiresIn,
+        issuer: "jcoder-api",
+      }
+    );
+
+    // Rotate refresh token for security
+    const newRefreshToken = rotateRefreshToken(clientRefreshToken, userInfo.userId, expiresIn);
+    
+    if (!newRefreshToken) {
+      return res.status(401).json({ error: "Failed to rotate refresh token" });
+    }
+
+    return res.status(200).json({
+      message: "Tokens refreshed successfully",
       data: {
-        user: {
-          id: user.id,
-          username: user.username,
-        },
-        token,
+        accessToken,
+        refreshToken: newRefreshToken,
         algorithm,
         expiresIn,
         issuedAt: issuedAt.toISOString(),
@@ -132,7 +226,59 @@ export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRe
       },
     });
   } catch (err: any) {
-    console.error("Error in login:", err);
+    console.error("Error in refreshToken:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+/**
+ * Logout user by revoking refresh token
+ */
+export const logout = async (req: Request<{}, ApiResponse, RefreshTokenRequestBody>, res: Response): Promise<Response> => {
+  const { refreshToken } = req.body;
+
+  if (!refreshToken) {
+    return res.status(400).json({
+      error: "Refresh token is required",
+    });
+  }
+
+  try {
+    const revoked = revokeRefreshToken(refreshToken);
+    
+    if (!revoked) {
+      return res.status(404).json({ error: "Refresh token not found" });
+    }
+
+    return res.status(200).json({
+      message: "Logout successful",
+    });
+  } catch (err: any) {
+    console.error("Error in logout:", err);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+};
+
+/**
+ * Logout from all devices by revoking all refresh tokens for the user
+ */
+export const logoutAll = async (req: Request, res: Response): Promise<Response> => {
+  try {
+    // req.user is set by the authenticateToken middleware
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const revokedCount = revokeAllUserTokens(req.user.userId);
+
+    return res.status(200).json({
+      message: `Logout successful from all devices`,
+      data: {
+        revokedTokens: revokedCount
+      }
+    });
+  } catch (err: any) {
+    console.error("Error in logoutAll:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 };

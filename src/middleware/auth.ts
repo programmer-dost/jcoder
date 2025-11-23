@@ -33,7 +33,13 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     const payload = JwtService.verify(token, {
       algorithms: availableAlgorithms,
       issuer: "jcoder-api",
-    }) as JwtPayload & { userId: number; username: string };
+    }) as JwtPayload & { userId: number; username: string; type?: string };
+
+    // Ensure this is an access token (not a refresh token)
+    if (payload.type && payload.type !== 'access') {
+      res.status(401).json({ error: "Invalid token type" });
+      return;
+    }
 
     req.user = {
       userId: payload.userId,

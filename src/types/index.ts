@@ -10,6 +10,7 @@ export interface LoginRequestBody {
   password: string;
   algorithm?: 'HS256' | 'HS384' | 'HS512' | 'RS256' | 'RS384' | 'RS512';
   expiresIn?: string;
+  issueRefreshToken?: boolean;
 }
 
 // Response types
@@ -24,7 +25,21 @@ export interface LoginResponse {
     id: number;
     username: string;
   };
-  token: string;
+  accessToken: string;
+  refreshToken?: string;
+  algorithm: string;
+  expiresIn: string;
+  issuedAt: string;
+  expiresAt: string;
+}
+
+export interface RefreshTokenRequestBody {
+  refreshToken: string;
+}
+
+export interface RefreshTokenResponse {
+  accessToken: string;
+  refreshToken: string;
   algorithm: string;
   expiresIn: string;
   issuedAt: string;
@@ -50,5 +65,13 @@ export interface User {
   username: string;
   password_hash: string;
   secret_message: string;
+  created_at: string;
+}
+
+export interface RefreshToken {
+  id: number;
+  user_id: number;
+  token_hash: string;
+  expires_at: string;
   created_at: string;
 }
