@@ -12,6 +12,58 @@ export interface JwtSignOptions {
   issuer?: string;
 }
 
+/**
+ * Validate expiration duration format
+ */
+export function validateExpiresIn(expiresIn: string): boolean {
+  // Allow formats like: "1h", "30m", "24h", "7d", "1y", or plain numbers (seconds)
+  const timeRegex = /^(\d+)([smhdy]?)$/;
+  return timeRegex.test(expiresIn);
+}
+
+/**
+ * Get default expiration options with descriptions
+ */
+export function getExpirationOptions(): { value: string; description: string }[] {
+  return [
+    { value: "15m", description: "15 minutes - Short session" },
+    { value: "1h", description: "1 hour - Standard session" },
+    { value: "24h", description: "24 hours - Extended session" },
+    { value: "7d", description: "7 days - Long-term session" },
+    { value: "30d", description: "30 days - Remember me" }
+  ];
+}
+
+/**
+ * Calculate expiration timestamp
+ */
+export function calculateExpirationTimestamp(expiresIn: string): Date {
+  const now = new Date();
+  const match = expiresIn.match(/^(\d+)([smhdy]?)$/);
+  
+  if (!match) {
+    throw new Error("Invalid expiration format");
+  }
+  
+  const amount = parseInt(match[1]);
+  const unit = match[2] || 's'; // default to seconds
+  
+  switch (unit) {
+    case 's': // seconds
+      return new Date(now.getTime() + amount * 1000);
+    case 'm': // minutes
+      return new Date(now.getTime() + amount * 60 * 1000);
+    case 'h': // hours
+      return new Date(now.getTime() + amount * 60 * 60 * 1000);
+    case 'd': // days
+      return new Date(now.getTime() + amount * 24 * 60 * 60 * 1000);
+    case 'y': // years
+      return new Date(now.getTime() + amount * 365 * 24 * 60 * 60 * 1000);
+    default:
+      throw new Error(`Unsupported time unit: ${unit}`);
+  }
+}
+
 export interface JwtVerifyOptions {
   algorithms?: JwtAlgorithm[];
   issuer?: string;

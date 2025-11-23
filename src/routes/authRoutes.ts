@@ -6,7 +6,7 @@ const router = Router();
 
 /**
  * GET /algorithms
- * Get available JWT algorithms
+ * Get available JWT algorithms and expiration options
  */
 router.get("/algorithms", getAlgorithms);
 
@@ -18,7 +18,7 @@ router.post("/signup", signup);
 
 /**
  * POST /login
- * Body: { username, password, algorithm? }
+ * Body: { username, password, algorithm?, expiresIn? }
  */
 router.post("/login", login);
 

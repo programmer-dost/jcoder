@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import db from "../db";
 import { hashPassword, verifyPassword } from "../security/password";
 import { SignupRequestBody, LoginRequestBody, UserResponse, LoginResponse, ApiResponse, User } from "../types";
-import { JwtService } from "../services/jwtService";
+import { JwtService, validateExpiresIn, calculateExpirationTimestamp, getExpirationOptions } from "../services/jwtService";
 
 /**
  * Handle user signup
@@ -61,12 +61,19 @@ export const signup = async (req: Request<{}, ApiResponse<UserResponse>, SignupR
  * Handle user login
  */
 export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRequestBody>, res: Response): Promise<Response> => {
-  const { username, password, algorithm = 'HS256' } = req.body;
+  const { username, password, algorithm = 'HS256', expiresIn = '24h' } = req.body;
 
   // Basic validation
   if (!username || !password) {
     return res.status(400).json({
       error: "username and password are required",
+    });
+  }
+
+  // Validate expiration duration format
+  if (!validateExpiresIn(expiresIn)) {
+    return res.status(400).json({
+      error: "Invalid expiration format. Use formats like: '15m', '1h', '24h', '7d', '30d' or plain numbers (seconds)",
     });
   }
 
@@ -93,7 +100,11 @@ export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRe
       return res.status(401).json({ error: "Invalid username or password" });
     }
 
-    // Generate JWT token with selected algorithm
+    // Calculate expiration timestamp
+    const issuedAt = new Date();
+    const expiresAt = calculateExpirationTimestamp(expiresIn);
+
+    // Generate JWT token with selected algorithm and expiration
     const token = JwtService.sign(
       { 
         userId: user.id,
@@ -101,7 +112,7 @@ export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRe
       },
       {
         algorithm,
-        expiresIn: "24h",
+        expiresIn,
         issuer: "jcoder-api",
       }
     );
@@ -112,11 +123,12 @@ export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRe
         user: {
           id: user.id,
           username: user.username,
-          secretMessage: user.secret_message,
         },
         token,
         algorithm,
-        expiresIn: "24h",
+        expiresIn,
+        issuedAt: issuedAt.toISOString(),
+        expiresAt: expiresAt.toISOString(),
       },
     });
   } catch (err: any) {
@@ -159,24 +171,38 @@ export const getProfile = async (req: Request, res: Response): Promise<Response>
 };
 
 /**
- * Get available JWT algorithms
+ * Get available JWT algorithms and expiration options
  */
 export const getAlgorithms = (req: Request, res: Response): Response => {
   try {
     const availableAlgorithms = JwtService.getAvailableAlgorithms();
+    const expirationOptions = getExpirationOptions();
     
     return res.status(200).json({
-      message: "Available JWT algorithms",
+      message: "Available JWT algorithms and expiration options",
       data: {
         algorithms: availableAlgorithms,
-        default: "HS256",
-        description: {
+        defaultAlgorithm: "HS256",
+        algorithmDescriptions: {
           "HS256": "HMAC using SHA-256 hash algorithm",
           "HS384": "HMAC using SHA-384 hash algorithm", 
           "HS512": "HMAC using SHA-512 hash algorithm",
           "RS256": "RSA using SHA-256 hash algorithm",
           "RS384": "RSA using SHA-384 hash algorithm",
           "RS512": "RSA using SHA-512 hash algorithm"
+        },
+        expirationOptions,
+        defaultExpiration: "24h",
+        expirationFormats: {
+          "examples": ["15m", "1h", "24h", "7d", "30d"],
+          "units": {
+            "s": "seconds",
+            "m": "minutes", 
+            "h": "hours",
+            "d": "days",
+            "y": "years"
+          },
+          "note": "Use format: number + unit (e.g., '2h' for 2 hours) or plain numbers for seconds"
         }
       },
     });

@@ -9,6 +9,7 @@ export interface LoginRequestBody {
   username: string;
   password: string;
   algorithm?: 'HS256' | 'HS384' | 'HS512' | 'RS256' | 'RS384' | 'RS512';
+  expiresIn?: string;
 }
 
 // Response types
@@ -22,11 +23,12 @@ export interface LoginResponse {
   user: {
     id: number;
     username: string;
-    secretMessage: string;
   };
   token: string;
   algorithm: string;
   expiresIn: string;
+  issuedAt: string;
+  expiresAt: string;
 }
 
 export interface ApiResponse<T = any> {
