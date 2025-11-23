@@ -31,6 +31,13 @@ export interface LoginResponse {
   expiresAt: string;
 }
 
+export interface SecretMessageResponse {
+  secretMessage: string;
+  username: string;
+  createdAt: string;
+  retrievedAt: string;
+}
+
 export interface ApiResponse<T = any> {
   message?: string;
   error?: string;

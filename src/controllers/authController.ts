@@ -138,39 +138,6 @@ export const login = async (req: Request<{}, ApiResponse<LoginResponse>, LoginRe
 };
 
 /**
- * Get user profile (protected route)
- */
-export const getProfile = async (req: Request, res: Response): Promise<Response> => {
-  try {
-    // req.user is set by the authenticateToken middleware
-    if (!req.user) {
-      return res.status(401).json({ error: "Unauthorized" });
-    }
-
-    // Get user details from database
-    const user = db.prepare("SELECT id, username, secret_message, created_at FROM users WHERE id = ?")
-      .get(req.user.userId) as Omit<User, 'password_hash'> | undefined;
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    return res.status(200).json({
-      message: "Profile retrieved successfully",
-      data: {
-        id: user.id,
-        username: user.username,
-        secretMessage: user.secret_message,
-        createdAt: user.created_at,
-      },
-    });
-  } catch (err: any) {
-    console.error("Error in getProfile:", err);
-    return res.status(500).json({ error: "Internal server error" });
-  }
-};
-
-/**
  * Get available JWT algorithms and expiration options
  */
 export const getAlgorithms = (req: Request, res: Response): Response => {

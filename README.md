@@ -10,8 +10,9 @@
 - [x] HMAC
 - [x] Utils Segreation
 - [x] RSA
-- [ ] API Expose
-  - [ ] Database for storing users' credentials and secret message for testing purposes.
+- [-] API Expose
+  - [x] Database for storing users' credentials and secret message for testing purposes.
+  - [ ] Secret message route
 - [ ] Frontend Setup
 - [ ] Frontend Integration
 - [ ] Refresh Token Functionality

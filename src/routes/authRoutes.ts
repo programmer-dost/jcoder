@@ -1,6 +1,5 @@
 import { Router } from "express";
-import { signup, login, getProfile, getAlgorithms } from "../controllers/authController";
-import { authenticateToken } from "../middleware/auth";
+import { signup, login, getAlgorithms } from "../controllers/authController";
 
 const router = Router();
 
@@ -21,11 +20,5 @@ router.post("/signup", signup);
  * Body: { username, password, algorithm?, expiresIn? }
  */
 router.post("/login", login);
-
-/**
- * GET /profile (protected)
- * Headers: { Authorization: "Bearer <token>" }
- */
-router.get("/profile", authenticateToken, getProfile);
 
 export default router;
