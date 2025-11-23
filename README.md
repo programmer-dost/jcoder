@@ -9,7 +9,8 @@
 
 - [x] HMAC
 - [x] Utils Segreation
-- [ ] RSA
+- [x] RSA
 - [ ] API Expose
 - [ ] Frontend Setup
 - [ ] Frontend Integration
+- [ ] Refresh Token Functionality
