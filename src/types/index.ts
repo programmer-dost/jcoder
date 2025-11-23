@@ -5,11 +5,28 @@ export interface SignupRequestBody {
   secretMessage: string;
 }
 
+export interface LoginRequestBody {
+  username: string;
+  password: string;
+  algorithm?: 'HS256' | 'HS384' | 'HS512' | 'RS256' | 'RS384' | 'RS512';
+}
+
 // Response types
 export interface UserResponse {
   username: string;
   secretMessage: string;
   createdAt: string;
+}
+
+export interface LoginResponse {
+  user: {
+    id: number;
+    username: string;
+    secretMessage: string;
+  };
+  token: string;
+  algorithm: string;
+  expiresIn: string;
 }
 
 export interface ApiResponse<T = any> {
